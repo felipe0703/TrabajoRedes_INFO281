@@ -4,10 +4,8 @@
 // Set these to run example.
 #define FIREBASE_HOST "redesinfo281.firebaseio.com"
 #define FIREBASE_AUTH "YC5H3n7yo3TVrt33EZDQxL0L32RJV15P6F8W5NaN"
-//#define WIFI_SSID "Q6_1425"
-//#define WIFI_PASSWORD "marcelo11"
-#define WIFI_SSID "ACLECH"
-#define WIFI_PASSWORD "carlosaclech910"
+#define WIFI_SSID "Marcelo_Sebastian"
+#define WIFI_PASSWORD "marsexo11"
 
 // Variables
 int vel_inicial = 1;

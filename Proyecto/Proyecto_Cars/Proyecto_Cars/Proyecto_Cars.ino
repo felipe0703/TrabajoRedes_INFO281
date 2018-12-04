@@ -6,17 +6,21 @@
 // Credenciales
 #define FIREBASE_HOST "redesinfo281.firebaseio.com"
 #define FIREBASE_AUTH "YC5H3n7yo3TVrt33EZDQxL0L32RJV15P6F8W5NaN"
-#define WIFI_SSID "Marcelo_Sebastian"
-#define WIFI_PASSWORD "marsexo11"
+//#define WIFI_SSID "Marcelo_Sebastian"
+//#define WIFI_PASSWORD "marsexo11"
+#define WIFI_SSID "iPhone de Felipe"
+#define WIFI_PASSWORD "martinaa"
+//#define WIFI_SSID "WIFITELSUR_ANAS"
+//#define WIFI_PASSWORD "76020949"
 
 //Objetos 
 DynamicJsonBuffer jBuffer;
 JsonObject& json_data = jBuffer.createObject(); // data
-JsonObject& json_carID = jBuffer.createObject(); // carID
 JsonObject& json_status = jBuffer.createObject(); // status
 JsonObject& json_mechanicF = jBuffer.createObject(); // mechanicFailure
 JsonObject& json_crash = jBuffer.createObject(); // crash
 JsonObject& json_lane = jBuffer.createObject(); // laneChange
+JsonArray& data_set = json_data.createNestedArray("data");
 
 
 
@@ -53,11 +57,29 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-
+  // generar probabilidad de ocurrencia de los eventos
+  int probabilidad1 = random(1,100);
+  int probabilidad2 = random(1,100);
+  int probabilidad3 = random(1,100);
+  
+  if( probabilidad1 <= 20){
+    //Serial.print("mechanicFailure: ");
+    //Serial.println(probabilidad1);
+    MechanicFailure_Put();  
+  }
+  if( probabilidad2 <= 50){
+//    Serial.print("crash: ");
+//    Serial.println(probabilidad2);
+    //Crash_Put();
+  }
+  if( probabilidad3 <= 80){
+//    Serial.print("laneChanged: ");
+//    Serial.println(probabilidad3);
+    //lane = LaneChanged_Put(lane);
+  }
+  delay(1000);
+  //Status_Put(lane);
 }
-
-
 
 
 //**************************************************************************************************************
@@ -83,8 +105,8 @@ float generateSpeed(){
       else{        
         comportC = 2;
       }
-      Serial.println(speedI); //Imprime velocidad inicial en el monitor serial
-      Serial.println(speedF); //Imprime velocidad finalen el monitor serial      
+      //Serial.println(speedI); //Imprime velocidad inicial en el monitor serial
+      //Serial.println(speedF); //Imprime velocidad finalen el monitor serial      
   }
   else{
       if(speedF >= 50){        
@@ -93,8 +115,8 @@ float generateSpeed(){
       else{        
         comportC = 1;
       }
-      Serial.println(speedI); //Imprime velocidad inicial en el monitor serial
-      Serial.println(speedF); //Imprime velocidad finalen el monitor serial     
+      //Serial.println(speedI); //Imprime velocidad inicial en el monitor serial
+      //Serial.println(speedF); //Imprime velocidad finalen el monitor serial     
   }
   return speedF;  
 }
@@ -152,7 +174,7 @@ float generateFuelLevel(float distanceX){
 float generateRPM(float speedFX){
   
   float dataN = ((225/1000)*(55/100) + (19*0.0127))*6.2832;
-  Serial.println(dataN); //Imprime velocidad finalen el monitor serial 
+  //Serial.println(dataN); //Imprime velocidad finalen el monitor serial 
   float RF1 = 4.09*3.552;
   float RF2 = 4.09*2.022;
   float RF3 = 4.09*1.452;
@@ -163,7 +185,7 @@ float generateRPM(float speedFX){
   
   if(speedFX <=15){ //1era
     relationSpeed = (dataN*60)/RF1;
-    Serial.println(relationSpeed); //Imprime velocidad finalen el monitor serial 
+    //Serial.println(relationSpeed); //Imprime velocidad finalen el monitor serial 
     rpm = (speedFX/relationSpeed)*1000;    
   }
   else if(speedFX >=16 && speedFX <= 30){ // 2da
@@ -188,4 +210,149 @@ float generateRPM(float speedFX){
   }
   
   return rpm;
+}
+
+//**************************************************************************************************************
+//***                               Métodos que generan los eventos                                          ***
+//**************************************************************************************************************
+
+
+//**********************************************************
+//********************   Método Status   *******************
+//**********************************************************
+
+void Status_Put(int lane){ 
+  
+  aceleration = generateAcel(speedI, speedF);  
+  distanceF = generateDistance(speedI, distanceI, aceleration);
+  distance = distance + distanceF; // Distancia acumulada/recorrida
+  fuel = generateFuelLevel(distanceF);
+  rpm = generateRPM(speedF);
+
+  json_data["carId"] = "MAZDA CX-5";
+  json_data["timestamp"]="";
+  json_data["eventType"] = "status";
+  
+  
+  json_status["fuelLevel"] = fuel;
+  json_status["km"] = distance;
+  json_status["aceleration"] = aceleration;
+  json_status["rpm"] = rpm;
+  json_status["kmh"] = speedF;
+  json_status["lane"] = lane;
+
+//  data_set.remove(0);
+//  data_set.add(json_status); 
+
+  json_data["data"] = json_status;
+  json_data.prettyPrintTo(Serial);
+  Serial.println("");
+
+// set value status
+  Firebase.push("",json_data);
+    
+  speedI = speedF; // se iguala la velocidad inicial y velocidad final 
+  distanceI = distanceF; // se iguala la distancia inicial y la distanciafinal 
+  speedF = generateSpeed();// se modifica la velocidad final despues de 1 segundo  
+
+}
+
+
+//**********************************************************
+//**************   Método MechanicFailure   ****************
+//**********************************************************
+
+void MechanicFailure_Put(){
+
+  int failure = random(1,2);
+
+  json_data["carId"] = "MAZDA CX-5";
+  json_data["timestamp"]="";
+  json_data["eventType"] = "mechanicFailure";
+    
+  json_mechanicF["failureCode"] = failure;
+
+//  data_set.remove(0);
+//  data_set.add(json_mechanicF);  
+  json_data["data"] = json_mechanicF;
+  json_data.prettyPrintTo(Serial);
+  Serial.println("");
+  
+  // set value failureCode
+  Firebase.push("",json_data);
+   
+}
+
+
+//**********************************************************
+//*******************   Método Crash   *********************
+//**********************************************************
+
+void Crash_Put(){
+
+  int air = random(1,2);
+  bool air_act;
+  float desaceleration = random(2500, 6000);
+  
+  desaceleration = desaceleration - aceleration;  //desaceleracion beta
+  
+  if(air == 1){
+    air_act = true;
+  }else{
+    air_act = false;
+  }
+
+  json_data["carId"] = "MAZDA CX-5";
+  json_data["timestamp"]="";
+  json_data["eventType"] = "crash";
+  
+  json_crash["aceleration"] = desaceleration;
+  json_crash["airbagsActivated"] = air_act;
+  
+//  data_set.remove(0);
+//  data_set.add(json_crash); 
+  json_data["data"] = json_crash; 
+  json_data.prettyPrintTo(Serial);
+  Serial.println("");
+  
+  // set value failureCode
+  Firebase.push("",json_data);
+}
+
+
+//**********************************************************
+//****************   Método LaneChanged   ******************
+//**********************************************************
+
+
+int LaneChanged_Put(int old_lane){
+
+    int new_lane = random(1,2); 
+
+    json_data["carId"] = "MAZDA CX-5";
+    json_data["timestamp"]="";
+    json_data["eventType"] = "laneChanged";
+
+    // cambio de carril
+    if(old_lane != new_lane){
+      
+         // set value oldLane
+        json_lane["oldLane"] = old_lane;
+    } 
+    // set value newLane  
+
+    
+    json_lane["newLane"] = new_lane;
+    
+//    data_set.remove(0);
+//    data_set.add(json_lane);  
+
+    json_data["data"] = json_lane; 
+    json_data.prettyPrintTo(Serial);
+    Serial.println("");
+    
+    // set value failureCode
+    Firebase.push("",json_data);
+    
+    return new_lane;
 }
