@@ -1,33 +1,30 @@
-//
-// Copyright 2015 Google Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-
-// FirebaseDemo_ESP8266 is a sample that demo the different functions
-// of the FirebaseArduino API.
-
 #include <ESP8266WiFi.h>
 #include <FirebaseArduino.h>
 
 // Set these to run example.
 #define FIREBASE_HOST "redesinfo281.firebaseio.com"
 #define FIREBASE_AUTH "YC5H3n7yo3TVrt33EZDQxL0L32RJV15P6F8W5NaN"
-#define WIFI_SSID "Q6_1425"
-#define WIFI_PASSWORD "marcelo11"
+//#define WIFI_SSID "Q6_1425"
+//#define WIFI_PASSWORD "marcelo11"
+#define WIFI_SSID "ACLECH"
+#define WIFI_PASSWORD "carlosaclech910"
+
+// Variables
+int vel_inicial = 1;
+int vel_final;
+int aceleracion = 15;
+int lane = 1;
+int timer;
+float dist = 0;
+bool continuar = true;
+unsigned long tiempoReal = 0;
+unsigned long tiempo = 0;
+unsigned long tiempo2 = 0;
+unsigned long tiempoSegundos = 0;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  tiempoReal = millis();
 
   // connect to wifi.
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -39,60 +36,53 @@ void setup() {
   Serial.println();
   Serial.print("connected: ");
   Serial.println(WiFi.localIP());
-  
+  //This initialize the client with the given firebase host and credentials.  
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+
+  removeAll();
 }
 
-int n = 0;
+
+
+
 
 void loop() {
-  
-  int probabilidad = numerosRandom(1,100);
-  Status();
 
-  if( probabilidad <= 20){
-    Serial.print("mechanicFailure: ");
-    Serial.println(probabilidad);
-     MechanicFailure();  
-  }
-  if( probabilidad <= 50){
-    Serial.print("crash: ");
-    Serial.println(probabilidad);
-    Crash();
-  }
-  if( probabilidad <= 80){
-    Serial.print("laneChanged: ");
-    Serial.println(probabilidad);
-    LaneChanged();
-  } 
-  
-  delay(1000);
-  
-  
+  if (continuar){
+    
+    int probabilidad = numerosRandom(1,100);
 
-//  // get value 
-//  Serial.print("number get: ");
-//  Serial.println(Firebase.getFloat("number"));
-//  delay(1000);
-//
+    timer = Tiempo();
+    
+    vel_final = velocidad(aceleracion,vel_inicial,timer);
+    
+//    if (vel_final >= 150){
+//      tiempo2 = tiempoReal; 
+//    }
+    dist = distancia(vel_final, tiempoSegundos);
+  
+    if( probabilidad <= 20){
+       MechanicFailure_Put();  
+    }
+    if( probabilidad <= 50){
+      Crash_Put(aceleracion);
+    }
+    if( probabilidad <= 80){
+      lane = LaneChanged_Put(lane);
+    } 
+    Status_Put(lane,aceleracion,vel_final,dist);
+    delay(1000); 
+    
+  }
+  //Status_Get(); 
+  
+  
+  
 //  // remove value
 //  Firebase.remove("number");
 //  delay(1000);
-//
-//  // set string value
-//  Firebase.setString("message", "hello world");
-//  
-//  // handle error
-//  if (Firebase.failed()) {
-//      Serial.print("setting /message failed:");
-//      Serial.println(Firebase.error());  
-//      return;
-//  }
-//  delay(1000);
-//  
-//  
-//
-//  // append a new value to /logs
+ 
+// append a new value to /logs
 //  String name = Firebase.pushInt("logs", n++);
 //  
 //  // handle error
@@ -101,9 +91,23 @@ void loop() {
 //      Serial.println(Firebase.error());  
 //      return;
 //  }
-//  Serial.print("pushed: /logs/");
-//  Serial.println(name);
-//  delay(1000);
+
+
+}
+
+int Tiempo(){
+    tiempoReal = millis(); //Actualiza el tiempo actual    
+    tiempo = tiempoReal - tiempo2; 
+    tiempoSegundos = tiempo/1000;
+
+    return tiempoSegundos;
+}
+
+void removeAll(){
+  Firebase.remove("status");
+  Firebase.remove("mechanicFailure");
+  Firebase.remove("crash");
+  Firebase.remove("laneChanged");
 }
 
 int numerosRandom(int minimo, int maximo){
@@ -112,99 +116,130 @@ int numerosRandom(int minimo, int maximo){
   return number;
 }
 
-  
-void Status(){
+int velocidad(int acel,int vel_ini,int tiempo){
+  int vel_final = acel + (vel_ini * tiempo);
+  if(vel_final >= 150){
+    vel_final = 150;  
+  }
+  return vel_final;
+}
+float distancia( int velocidad, int tiempo){
+    float dist = float((velocidad * tiempo)/60);
+    return dist;
+}
+
+void Status_Get(){
+
+  int fuelLevel = Firebase.getInt("status/fuelLevel");
+  float km = Firebase.getInt("status/km");
+  int aceleration = Firebase.getInt("status/aceleration");
+  int rpm = Firebase.getInt("status/rpm");
+  int kmh = Firebase.getInt("status/kmh");
+  int lane = Firebase.getInt("status/lane");
+
+  Serial.println("**************************************************************");
+  Serial.print("fuelLevel: ");
+  Serial.println(fuelLevel);
+  Serial.print("km: ");
+  Serial.println(km);
+  Serial.print("aceleration: ");
+  Serial.println(aceleration);
+  Serial.print("rpm: ");
+  Serial.println(rpm);
+  Serial.print("lane: ");
+  Serial.println(lane);
+}
+
+void Status_Put(int lane, int aceleration, int velocidad, float distancia){
 
   int fuelLevel = numerosRandom(0,99);
-  int km = numerosRandom(0,149);
-  int aceleration = numerosRandom(0,99);
+  //int km = numerosRandom(0,149);
+  //int aceleration = numerosRandom(0,99);
   int rpm = numerosRandom(1,500);
-  int kmh = numerosRandom(1,100);
-  int lane = numerosRandom(1,2);
+  //int kmh = numerosRandom(1,100);
+  //int lane = numerosRandom(1,2);
 
   // set value fuellLevel
-  Firebase.setInt("fuelLevel", fuelLevel);
+  Firebase.setInt("status/fuelLevel", fuelLevel);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /fuelLevel failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /fuelLevel failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value km
-  Firebase.setInt("km", km);
+  Firebase.setFloat("status/km", distancia);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /km failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /km failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value aceleration
-  Firebase.setInt("aceleration", aceleration);
+  Firebase.setInt("status/aceleration", aceleration);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /aceleration failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /aceleration failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value rpm
-  Firebase.setInt("rpm", rpm);
+  Firebase.setInt("status/rpm", rpm);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /rpm failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /rpm failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value kmh
-  Firebase.setInt("kmh", kmh);
+  Firebase.setInt("status/kmh", velocidad);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /kmh failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /kmh failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value lane
-  Firebase.setInt("lane", lane);
+  Firebase.setInt("status/lane", lane);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /lne failed:");
-      Serial.println(Firebase.error());  
-      return;
-  } 
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /lne failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  } 
 
 }
 
 
-void MechanicFailure(){
+void MechanicFailure_Put(){
 
-  int failure = numerosRandom(1,3);
-  //Serial.println(prob_ocurrencia);
-  
+  int failure = numerosRandom(1,2);
+    
   // set value failureCode
-  Firebase.setInt("failureCode", failure);
+  Firebase.setInt("mechanicFailure/failureCode", failure);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /failureCode failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /failureCode failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 }
 
 //**********************************************//
-void Crash(){
+void Crash_Put(int aceleracion){
 
-  int acel = numerosRandom(1,3);
   int air = numerosRandom(1,3);
   bool air_act;
   
@@ -214,50 +249,52 @@ void Crash(){
     air_act = false;
   }
   // set value aceleration
-  Firebase.setInt("aceleration_crash", acel);
+  Firebase.setInt("crash/aceleration", aceleracion);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /aceleration failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /aceleration failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
 
   // set value airBagsActivated
-  Firebase.setBool("airBagsActivated", air_act);
+  Firebase.setBool("crash/airBagsActivated", air_act);
   
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /airBagsActivated failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+//  // handle error
+//  if (Firebase.failed()) {
+//      Serial.print("setting /airBagsActivated failed:");
+//      Serial.println(Firebase.error());  
+//      return;
+//  }
+  //continuar = false;
 }
 
 //**********************************************//
-void LaneChanged(){
+int LaneChanged_Put(int old_lane){
 
-  int old_l = numerosRandom(1,2);
-  int new_l = numerosRandom(1,2);
-  
-  
-  // set value oldLane
-  Firebase.setInt("oldLane", old_l);
-  
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /oldLane failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+    int new_lane = numerosRandom(1,2); 
 
-  // set value newLane
-  Firebase.setInt("newLane", new_l);
-  
-  // handle error
-  if (Firebase.failed()) {
-      Serial.print("setting /newLane failed:");
-      Serial.println(Firebase.error());  
-      return;
-  }
+    // cambio de carril
+    if(old_lane != new_lane){
+         // set value oldLane
+        Firebase.setInt("laneChanged/oldLane", old_lane);
+        
+//        // handle error
+//        if (Firebase.failed()) {
+//            Serial.print("setting /oldLane failed:");
+//            Serial.println(Firebase.error());  
+//            //return;
+//        }
+    }  
+    // set value newLane
+    Firebase.setInt("laneChanged/newLane", new_lane);
+    
+//    // handle error
+//    if (Firebase.failed()) {
+//        Serial.print("setting /newLane failed:");
+//        Serial.println(Firebase.error());  
+//        //return;
+//    }
+    return new_lane;
 }
