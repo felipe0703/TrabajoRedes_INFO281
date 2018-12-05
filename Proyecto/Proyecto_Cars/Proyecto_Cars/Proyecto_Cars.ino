@@ -2,6 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <FirebaseArduino.h>
 #include <ArduinoJson.h>
+#include <WiFiUdp.h>
 
 // Credenciales
 #define FIREBASE_HOST "redesinfo281.firebaseio.com"
@@ -10,8 +11,6 @@
 //#define WIFI_PASSWORD "marsexo11"
 #define WIFI_SSID "iPhone de Felipe"
 #define WIFI_PASSWORD "martinaa"
-//#define WIFI_SSID "WIFITELSUR_ANAS"
-//#define WIFI_PASSWORD "76020949"
 
 //Objetos 
 DynamicJsonBuffer jBuffer;
@@ -38,6 +37,19 @@ float rpm;
 float lane = 1;
 
 
+// Variables para timestamp
+unsigned long epoch; // variable global que indica el tiempo en segundos
+//Your UTC Time Zone Differance  India -3:00
+char HH = -3;
+char MM = 00;
+unsigned int localPort = 2390;      // local port to listen for UDP packets
+IPAddress timeServerIP;     // time.nist.gov NTP server address
+const char* ntpServerName = "ntp.shoa.cl";
+const int NTP_PACKET_SIZE = 48;      // NTP time stamp is in the first 48 bytes of the message
+byte packetBuffer[ NTP_PACKET_SIZE];     //buffer to hold incoming and outgoing packets
+WiFiUDP udp;      // A UDP instance to let us send and receive packets over UDP
+
+
 
 void setup() {
     Serial.begin(115200);
@@ -54,9 +66,11 @@ void setup() {
     Serial.println(WiFi.localIP());
     //This initialize the client with the given firebase host and credentials.  
     Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+    removeAll();
 }
 
 void loop() {
+  timeStamp();
   // generar probabilidad de ocurrencia de los eventos
   int probabilidad1 = random(1,100);
   int probabilidad2 = random(1,100);
@@ -70,16 +84,18 @@ void loop() {
   if( probabilidad2 <= 50){
 //    Serial.print("crash: ");
 //    Serial.println(probabilidad2);
-    //Crash_Put();
+    Crash_Put();
   }
   if( probabilidad3 <= 80){
 //    Serial.print("laneChanged: ");
 //    Serial.println(probabilidad3);
-    //lane = LaneChanged_Put(lane);
+    lane = LaneChanged_Put(lane);
   }
   delay(1000);
-  //Status_Put(lane);
+  Status_Put(lane);
 }
+
+
 
 
 //**************************************************************************************************************
@@ -230,7 +246,7 @@ void Status_Put(int lane){
   rpm = generateRPM(speedF);
 
   json_data["carId"] = "MAZDA CX-5";
-  json_data["timestamp"]="";
+  json_data["timestamp"]= timeStamp();
   json_data["eventType"] = "status";
   
   
@@ -245,11 +261,11 @@ void Status_Put(int lane){
 //  data_set.add(json_status); 
 
   json_data["data"] = json_status;
-  json_data.prettyPrintTo(Serial);
-  Serial.println("");
+  //json_data.prettyPrintTo(Serial);
+  //Serial.println("");
 
 // set value status
-  Firebase.push("",json_data);
+  Firebase.push(json_data["carId"],json_data);
     
   speedI = speedF; // se iguala la velocidad inicial y velocidad final 
   distanceI = distanceF; // se iguala la distancia inicial y la distanciafinal 
@@ -267,7 +283,7 @@ void MechanicFailure_Put(){
   int failure = random(1,2);
 
   json_data["carId"] = "MAZDA CX-5";
-  json_data["timestamp"]="";
+  json_data["timestamp"]= timeStamp();
   json_data["eventType"] = "mechanicFailure";
     
   json_mechanicF["failureCode"] = failure;
@@ -275,11 +291,11 @@ void MechanicFailure_Put(){
 //  data_set.remove(0);
 //  data_set.add(json_mechanicF);  
   json_data["data"] = json_mechanicF;
-  json_data.prettyPrintTo(Serial);
-  Serial.println("");
+  //json_data.prettyPrintTo(Serial);
+  //Serial.println("");
   
   // set value failureCode
-  Firebase.push("",json_data);
+  Firebase.push(json_data["carId"],json_data);
    
 }
 
@@ -303,7 +319,7 @@ void Crash_Put(){
   }
 
   json_data["carId"] = "MAZDA CX-5";
-  json_data["timestamp"]="";
+  json_data["timestamp"]= timeStamp();
   json_data["eventType"] = "crash";
   
   json_crash["aceleration"] = desaceleration;
@@ -312,11 +328,11 @@ void Crash_Put(){
 //  data_set.remove(0);
 //  data_set.add(json_crash); 
   json_data["data"] = json_crash; 
-  json_data.prettyPrintTo(Serial);
-  Serial.println("");
+  //json_data.prettyPrintTo(Serial);
+  //Serial.println("");
   
   // set value failureCode
-  Firebase.push("",json_data);
+  Firebase.push(json_data["carId"],json_data);
 }
 
 
@@ -330,29 +346,117 @@ int LaneChanged_Put(int old_lane){
     int new_lane = random(1,2); 
 
     json_data["carId"] = "MAZDA CX-5";
-    json_data["timestamp"]="";
+    json_data["timestamp"]= timeStamp();
     json_data["eventType"] = "laneChanged";
 
-    // cambio de carril
-    if(old_lane != new_lane){
-      
-         // set value oldLane
-        json_lane["oldLane"] = old_lane;
-    } 
-    // set value newLane  
-
-    
+  
+    json_lane["oldLane"] = old_lane; 
     json_lane["newLane"] = new_lane;
     
 //    data_set.remove(0);
 //    data_set.add(json_lane);  
 
     json_data["data"] = json_lane; 
-    json_data.prettyPrintTo(Serial);
-    Serial.println("");
+    //json_data.prettyPrintTo(Serial);
+    //Serial.println("");
     
     // set value failureCode
-    Firebase.push("",json_data);
+    Firebase.push(json_data["carId"],json_data);
     
     return new_lane;
+}
+
+//**************************************************************************************************************
+//***                              Métodos para calcular el TimeStamp                                        ***
+//**************************************************************************************************************
+
+
+//**********************************************************
+//***************   Método sendNTPpacket   *****************
+//**********************************************************
+
+
+unsigned long sendNTPpacket(IPAddress& address)
+{
+  Serial.println("sending NTP packet...");  
+  // establece todos los bytes en el búfer a 0
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);  
+  
+  // Inicializa los valores necesarios para formar la solicitud NTP
+  
+  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
+  packetBuffer[1] = 0;     // Stratum, or type of clock
+  packetBuffer[2] = 6;     // Polling Interval
+  packetBuffer[3] = 0xEC;  // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  packetBuffer[12]  = 49;
+  packetBuffer[13]  = 0x4E;
+  packetBuffer[14]  = 49;
+  packetBuffer[15]  = 52;
+    
+  udp.beginPacket(address, 123); //NTP requests are to port 123
+  udp.write(packetBuffer, NTP_PACKET_SIZE);
+  udp.endPacket();
+}
+
+
+//**********************************************************
+//*****************   Método TimeStamp   *******************
+//**********************************************************
+
+// extrae el horario en segundos.
+
+void timeStamp(){
+  
+  WiFi.hostByName(ntpServerName, timeServerIP); 
+
+  sendNTPpacket(timeServerIP); // enviar un paquete NTP a un servidor de tiempo  
+  // esperar para ver si hay una respuesta disponible
+  delay(1000);
+  
+  int cb = udp.parsePacket();
+  if (!cb) {
+    Serial.println("no packet yet");
+  }
+  else {
+    Serial.print("packet received, length=");
+    Serial.println(cb);    
+    // Se recibe el paquete y lee los datos de él
+    udp.read(packetBuffer, NTP_PACKET_SIZE); // leer el paquete en el búffer
+    
+    // timestamp comienza en el byte 40 del paquete recibido y es de cuatro bytes,
+    // o dos palabras, largas. Primero, extrae las dos palabras:
+
+    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
+    
+    // combina los cuatro bytes (dos palabras) en un entero largo
+    // este es el tiempo NTP (segundos desde el 1 de enero de 1900):
+    
+    unsigned long secsSince1900 = highWord << 16 | lowWord;
+    //Serial.print("Seconds since Jan 1 1900 = " );
+    Serial.println(secsSince1900);
+
+    // ahora convierte el tiempo NTP en tiempo diario:
+    Serial.print("Unix time = ");
+    // Unix time comienza on Jan 1 1970. En segundos, que es 2208988800:
+    const unsigned long seventyYears = 2208988800UL;    
+    // restar setenta años:
+    epoch = secsSince1900 - seventyYears;
+    // print Unix time:
+    Serial.println(epoch);
+  }    
+}
+
+
+//**************************************************************************************************************
+//***                                     Métodos adicionales                                                ***
+//**************************************************************************************************************
+
+//**********************************************************
+//******************   Método removeAll  *******************
+//**********************************************************
+
+void removeAll(){
+  Firebase.remove(json_data["carId"]);
 }
