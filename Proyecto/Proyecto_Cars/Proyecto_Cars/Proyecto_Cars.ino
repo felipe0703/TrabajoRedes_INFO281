@@ -406,7 +406,7 @@ unsigned long sendNTPpacket(IPAddress& address)
 
 // extrae el horario en segundos.
 
-void timeStamp(){
+long timeStamp(){
   
   WiFi.hostByName(ntpServerName, timeServerIP); 
 
@@ -445,6 +445,7 @@ void timeStamp(){
     epoch = secsSince1900 - seventyYears;
     // print Unix time:
     Serial.println(epoch);
+    return epoch;
   }    
 }
 
