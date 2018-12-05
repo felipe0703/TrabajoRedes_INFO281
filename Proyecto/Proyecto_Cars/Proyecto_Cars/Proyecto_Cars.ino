@@ -40,7 +40,7 @@ float lane = 1;
 // Variables para timestamp
 unsigned long epoch; // variable global que indica el tiempo en segundos
 //Your UTC Time Zone Differance  India -3:00
-char HH = -3;
+char HH = -5;
 char MM = 00;
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 IPAddress timeServerIP;     // time.nist.gov NTP server address
@@ -64,13 +64,19 @@ void setup() {
     Serial.println();
     Serial.print("connected: ");
     Serial.println(WiFi.localIP());
+    
+    Serial.println("Starting UDP");
+    udp.begin(localPort);
+    Serial.print("Local port: ");
+    Serial.println(udp.localPort());    
+    
     //This initialize the client with the given firebase host and credentials.  
+    Serial.println("Connected Firebase");
     Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
     removeAll();
 }
 
 void loop() {
-  timeStamp();
   // generar probabilidad de ocurrencia de los eventos
   int probabilidad1 = random(1,100);
   int probabilidad2 = random(1,100);
@@ -80,11 +86,17 @@ void loop() {
     //Serial.print("mechanicFailure: ");
     //Serial.println(probabilidad1);
     MechanicFailure_Put();  
+    statusStop();   
+    delay(500);
+    speedF = 10;
   }
   if( probabilidad2 <= 50){
 //    Serial.print("crash: ");
 //    Serial.println(probabilidad2);
     Crash_Put();
+    statusStop();   
+    delay(500);
+    speedF = 10;
   }
   if( probabilidad3 <= 80){
 //    Serial.print("laneChanged: ");
@@ -366,6 +378,45 @@ int LaneChanged_Put(int old_lane){
     return new_lane;
 }
 
+
+//**********************************************************
+//******************   Método StatusStop  *******************
+//**********************************************************
+
+void statusStop(){
+  
+  aceleration = 0;
+  rpm = 0;
+  speedF = 0;
+  
+  json_data["carId"] = "MAZDA CX-5";
+  json_data["timestamp"]= timeStamp();
+  json_data["eventType"] = "statusStop"; // hay que cambiarlo por status  
+  
+  json_status["fuelLevel"] = fuel;
+  json_status["km"] = distance;
+  json_status["aceleration"] = aceleration;
+  json_status["rpm"] = rpm;
+  json_status["kmh"] = speedF;
+  json_status["lane"] = lane;
+
+//  data_set.remove(0);
+//  data_set.add(json_status); 
+
+  json_data["data"] = json_status;
+  //json_data.prettyPrintTo(Serial);
+  //Serial.println("");
+
+// set value status
+  Firebase.push(json_data["carId"],json_data);
+    
+  speedI = 0; // se iguala la velocidad inicial y velocidad final 
+  distanceI = distanceF; // se iguala la distancia inicial y la distanciafinal 
+  //speedF = generateSpeed();// se modifica la velocidad final despues de 1 segundo
+  
+}
+
+
 //**************************************************************************************************************
 //***                              Métodos para calcular el TimeStamp                                        ***
 //**************************************************************************************************************
@@ -378,7 +429,7 @@ int LaneChanged_Put(int old_lane){
 
 unsigned long sendNTPpacket(IPAddress& address)
 {
-  Serial.println("sending NTP packet...");  
+  //Serial.println("sending NTP packet...");  
   // establece todos los bytes en el búfer a 0
   memset(packetBuffer, 0, NTP_PACKET_SIZE);  
   
@@ -416,11 +467,12 @@ long timeStamp(){
   
   int cb = udp.parsePacket();
   if (!cb) {
-    Serial.println("no packet yet");
+    //Serial.println("no packet yet");
+    return 0;
   }
   else {
-    Serial.print("packet received, length=");
-    Serial.println(cb);    
+    //Serial.print("packet received, length=");
+   // Serial.println(cb);    
     // Se recibe el paquete y lee los datos de él
     udp.read(packetBuffer, NTP_PACKET_SIZE); // leer el paquete en el búffer
     
@@ -435,16 +487,16 @@ long timeStamp(){
     
     unsigned long secsSince1900 = highWord << 16 | lowWord;
     //Serial.print("Seconds since Jan 1 1900 = " );
-    Serial.println(secsSince1900);
+    //Serial.println(secsSince1900);
 
     // ahora convierte el tiempo NTP en tiempo diario:
-    Serial.print("Unix time = ");
+    //Serial.print("Unix time = ");
     // Unix time comienza on Jan 1 1970. En segundos, que es 2208988800:
     const unsigned long seventyYears = 2208988800UL;    
     // restar setenta años:
     epoch = secsSince1900 - seventyYears;
     // print Unix time:
-    Serial.println(epoch);
+    //Serial.println(epoch);
     return epoch;
   }    
 }
