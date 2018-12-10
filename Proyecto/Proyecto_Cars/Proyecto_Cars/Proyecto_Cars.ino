@@ -108,13 +108,13 @@ void loop() {
       //    Serial.print("laneChanged: ");
       //    Serial.println(probabilidad3);
           lane = LaneChanged_Put(lane);
-        } 
+        }
+        Status_Put(lane); 
       }  
       else{
         Serial.println("La pana del tonto, sin combustible");
       }
-      delay(1000);   
-      Status_Put(lane); 
+      delay(1000);          
   }
   else{
       Serial.println("Event Type: Stop()"); 
