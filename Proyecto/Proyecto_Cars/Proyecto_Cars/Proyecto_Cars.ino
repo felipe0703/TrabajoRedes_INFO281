@@ -9,10 +9,12 @@
 #define FIREBASE_AUTH "YC5H3n7yo3TVrt33EZDQxL0L32RJV15P6F8W5NaN"
 //#define WIFI_SSID "Marcelo_Sebastian"
 //#define WIFI_PASSWORD "marsexo11"
-#define WIFI_SSID "iPhone de Felipe"
-#define WIFI_PASSWORD "martinaa"
+//#define WIFI_SSID "iPhone de Felipe"
+//#define WIFI_PASSWORD "martinaa"
+#define WIFI_SSID "WifiTelsur_CAVN"
+#define WIFI_PASSWORD "27162925"
 
-//Objetos 
+//Objetos para crear el json
 DynamicJsonBuffer jBuffer;
 JsonObject& json_data = jBuffer.createObject(); // data
 JsonObject& json_status = jBuffer.createObject(); // status
@@ -31,10 +33,11 @@ float aceleration;
 float distanceI = 0.00278; // Unidad de medida: [km]. Distancia inicial recorrida
 float distanceF; // Unidad de medida: [km]. Distancia final recorrida
 float distance = 0; // Unidad de medida: [km]. Distancia acumulada
-float fuel = 58; // Unidad de medida: [litros]. Capacidad del tanque
+float fuel = 0.55; //58 Unidad de medida: [litros]. Capacidad del tanque
 int comportC = 1; // comportamiento aleatorio del coche
 float rpm;
 float lane = 1;
+bool parar = false;
 
 
 // Variables para timestamp
@@ -74,37 +77,48 @@ void setup() {
     Serial.println("Connected Firebase");
     Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
     removeAll();
+    Stop_Put();
 }
 
 void loop() {
   // generar probabilidad de ocurrencia de los eventos
-  int probabilidad1 = random(1,100);
-  int probabilidad2 = random(1,100);
-  int probabilidad3 = random(1,100);
-  
-  if( probabilidad1 <= 20){
-    //Serial.print("mechanicFailure: ");
-    //Serial.println(probabilidad1);
-    MechanicFailure_Put();  
-    statusStop();   
-    delay(500);
-    speedF = 10;
+  int probabilidad1 = random(1,101);
+  int probabilidad2 = random(1,101);
+  int probabilidad3 = random(1,101);
+  parar = Stop_Get();
+  if(!parar){
+    if(fuel >= 0.5){
+        if( probabilidad1 <= 20){
+          //Serial.print("mechanicFailure: ");
+          //Serial.println(probabilidad1);
+          MechanicFailure_Put();  
+          Reset();   
+          delay(500);
+          speedF = 10;
+        }
+        if( probabilidad2 <= 50){
+      //    Serial.print("crash: ");
+      //    Serial.println(probabilidad2);
+          Crash_Put();
+          Reset();   
+          delay(500);
+          speedF = 10;
+        }
+        if( probabilidad3 <= 80){
+      //    Serial.print("laneChanged: ");
+      //    Serial.println(probabilidad3);
+          lane = LaneChanged_Put(lane);
+        } 
+      }  
+      else{
+        Serial.println("La pana del tonto, sin combustible");
+      }
+      delay(1000);   
+      Status_Put(lane); 
   }
-  if( probabilidad2 <= 50){
-//    Serial.print("crash: ");
-//    Serial.println(probabilidad2);
-    Crash_Put();
-    statusStop();   
-    delay(500);
-    speedF = 10;
-  }
-  if( probabilidad3 <= 80){
-//    Serial.print("laneChanged: ");
-//    Serial.println(probabilidad3);
-    lane = LaneChanged_Put(lane);
-  }
-  delay(1000);
-  Status_Put(lane);
+  else{
+      Serial.println("Event Type: Stop()"); 
+  }  
 }
 
 
@@ -123,8 +137,8 @@ void loop() {
 
 float generateSpeed(){ 
    
-  float contRandP = random(1,5); // aumenta la velocidad de forma lenta
-  float contRandS = random(5,8); // disminuye la velocidad de forma drastica
+  float contRandP = random(1,6); // aumenta la velocidad de forma lenta
+  float contRandS = random(5,9); // disminuye la velocidad de forma drastica
   
   if(comportC == 1) {
       if(speedF <= 100){        
@@ -292,7 +306,7 @@ void Status_Put(int lane){
 
 void MechanicFailure_Put(){
 
-  int failure = random(1,2);
+  int failure = random(1,3);
 
   json_data["carId"] = "MAZDA CX-5";
   json_data["timestamp"]= timeStamp();
@@ -318,9 +332,9 @@ void MechanicFailure_Put(){
 
 void Crash_Put(){
 
-  int air = random(1,2);
+  int air = random(1,3);
   bool air_act;
-  float desaceleration = random(2500, 6000);
+  float desaceleration = random(2500, 6001);
   
   desaceleration = desaceleration - aceleration;  //desaceleracion beta
   
@@ -355,7 +369,13 @@ void Crash_Put(){
 
 int LaneChanged_Put(int old_lane){
 
-    int new_lane = random(1,2); 
+    int new_lane; 
+
+    if (old_lane == 1){
+      new_lane = 2;
+    } else {
+        new_lane = 1;
+    }
 
     json_data["carId"] = "MAZDA CX-5";
     json_data["timestamp"]= timeStamp();
@@ -380,10 +400,10 @@ int LaneChanged_Put(int old_lane){
 
 
 //**********************************************************
-//******************   Método StatusStop  *******************
+//******************   Método Reset  *******************
 //**********************************************************
 
-void statusStop(){
+void Reset(){
   
   aceleration = 0;
   rpm = 0;
@@ -391,7 +411,7 @@ void statusStop(){
   
   json_data["carId"] = "MAZDA CX-5";
   json_data["timestamp"]= timeStamp();
-  json_data["eventType"] = "statusStop"; // hay que cambiarlo por status  
+  json_data["eventType"] = "Reset"; // hay que cambiarlo por status  
   
   json_status["fuelLevel"] = fuel;
   json_status["km"] = distance;
@@ -415,6 +435,31 @@ void statusStop(){
   //speedF = generateSpeed();// se modifica la velocidad final despues de 1 segundo
   
 }
+
+//**********************************************************
+//******************   Método Stop_Put   *******************
+//**********************************************************
+
+void Stop_Put(){
+
+  
+  // set value failureCode
+  Firebase.set("Stop","False");
+}
+
+//**********************************************************
+//******************   Método Stop_Get   *******************
+//**********************************************************
+
+bool Stop_Get(){
+  String event = Firebase.getString("Stop");
+  if(event == "True"){    
+    return true;
+  }else if(event == "False"){
+    return false;  
+  }
+}
+
 
 
 //**************************************************************************************************************
@@ -512,4 +557,5 @@ long timeStamp(){
 
 void removeAll(){
   Firebase.remove(json_data["carId"]);
+  Firebase.remove("Stop");
 }
